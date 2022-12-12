@@ -87,6 +87,7 @@ def get_normalized_column_vector_set(columnVectors, meanFace):
   return normalize_cv.T
 
 def normalize_U(U):
+  # normalize to 0-255
   Umin=np.amin(U)
   Umax=np.amax(U)
   U2=np.ndarray(shape=(45045,8))
