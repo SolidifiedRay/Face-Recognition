@@ -28,34 +28,35 @@ def main():
   # For each training image, stack the row together to form a column vector R
   columnVectors = get_column_vector_set(trainingImagesPath)
   # The mean face is computed by taking the average of the training face images
-  meanFace = get_mean_face(columnVectors)
+  meanFace = np.mean(columnVectors, axis=0)
   show_mean_face(meanFace, imageRow, imageColumn)
   # We subtract the mean face from each training face and put them into a single matrix A
   # The follow function return A transpose
-  AT = get_normalized_column_vector_set(columnVectors, meanFace)
-  A = AT.transpose()
+  A = get_normalized_column_vector_set(columnVectors, meanFace)
+  AT = A.transpose()
   # We find eigenvalues of L = A transpose x A
   L = np.matmul(AT, A)
   # Put eigenvectors of L into a single matrix V
   _, V = np.linalg.eig(L)
   # The M largest eigenvectors of C can be found by U = AV
   U = np.matmul(A,V)
+  U = normalize_U(U)
   UT = U.transpose()
   # Display eigenface
   show_eigenface(UT, imageRow, imageColumn)
   # For each training face, calculate its eigenface coefficients omega
-  trainingCoefficients = []
-  for R in AT:
-    omega = np.matmul(UT, R)
-    trainingCoefficients.append(omega)
-
+  trainingCoefficients = np.zeros(shape=(len(trainingImagesPath),len(trainingImagesPath)))
+  for i in range(len(trainingImagesPath)):
+    omega = np.matmul(UT, A[:,i])
+    trainingCoefficients[i]=omega
   # Calculate the eigenface coefficient of each testing image
   testingColumnVectors = get_column_vector_set(testingImagesPath)
   testingNormalizedColumnVectors = get_normalized_column_vector_set(testingColumnVectors, meanFace)
-  testingCoefficients = []
-  for I in testingNormalizedColumnVectors:
-    omega = np.matmul(UT, I)
-    testingCoefficients.append(omega)
+  testingCoefficients = np.zeros(shape=(len(testingImagesPath),len(trainingImagesPath)))
+  for i in range(len(testingImagesPath)):
+    omega = np.matmul(UT, testingNormalizedColumnVectors[:,i])
+    print(omega)
+    testingCoefficients[i]=omega
 
   # Calculate and print recognition result for each test image
   for i in range(len(testingCoefficients)):
@@ -65,55 +66,36 @@ def main():
     print()
 
 
-
-def get_training_images(trainingImagesPath):
-  images_set = []
-  for path in trainingImagesPath:
-    # read image in grayscale mode
-    image = cv2.imread(path, 0)
-    images_set.append(image)
-  return images_set
-
-
-def get_column_vector(image):
-  #convert n * n image to n^2 * 1 column vector
-  columnVector = [0]*(len(image)*len(image[0]))
-  index = 0
-  for row in image:
-    for column in row:
-      columnVector[index] = column
-      index += 1
-  return columnVector
-
-
 def get_column_vector_set(trainingImagesPath):
-  # convert each training images to a column vector R
-  image_set = get_training_images(trainingImagesPath)
-  vector_set = []
-  for image in image_set:
-    vector_set.append(get_column_vector(image))
-  return vector_set
-
-
-def get_mean_face(columnVectors):
-  # calculate average face out of all column vectors
-  meanFace = [0]*len(columnVectors[0])
-  for cv in columnVectors:
-    for i in range(len(cv)):
-      meanFace[i] += cv[i]
-  for i in range(len(meanFace)):
-    # round off digit after decimal points because pixels only accept int as legal value
-    meanFace[i] = round(meanFace[i]/len(columnVectors))
-  return np.array(meanFace)
-
+  #flat out images to columnvectors
+  column_vector_set = 0
+  for i in range(len(trainingImagesPath)):
+    # read image in grayscale mode
+    image = cv2.imread(trainingImagesPath[i], 0)
+    image = image.reshape(1,45045)
+    if i == 0:
+      column_vector_set = image
+    else:
+      column_vector_set = np.append(column_vector_set,image,axis=0)
+  return column_vector_set
 
 def get_normalized_column_vector_set(columnVectors, meanFace):
   # normalize column vectors by subtracting the average face from them
-  columnVectors = np.array(columnVectors)
+  normalize_cv = np.ndarray(shape=(len(columnVectors),45045))
   for i in range(len(columnVectors)):
-    columnVectors[i] = columnVectors[i] - meanFace
-  return columnVectors
+    normalize_cv[i] = columnVectors[i] - meanFace
+  return normalize_cv.T
 
+def normalize_U(U):
+  Umin=np.amin(U)
+  Umax=np.amax(U)
+  U2=np.ndarray(shape=(45045,8))
+  for i in range(U.shape[0]):
+    for j in range(U.shape[1]):
+      g = U[i][j]
+      g = (g - Umin) * 255/(Umax - Umin)
+      U2[i][j]=g
+  return U2
 
 def get_euclidean_distance(a, b):
   # calculate euclidean distance between two vectors
@@ -128,7 +110,7 @@ def get_match_face(input, dataset):
   matchIndex = 0
   minDistance = float('inf')
   for i in range(len(dataset)):
-    curDistance = get_euclidean_distance(input,dataset[i])
+    curDistance = get_euclidean_distance(input,dataset[i].reshape(8,1))
     if(curDistance < minDistance):
       minDistance = curDistance
       matchIndex = i
